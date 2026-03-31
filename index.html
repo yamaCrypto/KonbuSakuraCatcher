@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>KONBU SAKURA CATCHER</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #ffeef8;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            touch-action: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            background: #a1c4fd;
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
+            z-index: 1;
+        }
+        #damageFlash {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: red;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 5;
+            transition: opacity 0.1s;
+        }
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            /* 桜をイメージしたピンク系の透過背景 */
+            background: rgba(255, 235, 245, 0.85);
+            /* テキストカラーを濃いめのピンクブラウンにして読みやすく */
+            color: #5d3b4a;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+        /* 背景キャラクター画像：img/konbuu.png を使用 */
+        .overlay-bg-konbu {
+            position: absolute;
+            width: 70%; 
+            height: 70%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-image: url('img/konbuu.png');
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: contain;
+            opacity: 0.25; /* ピンク背景に合わせて調整 */
+            z-index: -1;
+        }
+        h1 { 
+            font-size: 2.5em; 
+            margin-bottom: 10px; 
+            color: #ff69b4; 
+            text-shadow: 2px 2px 0px #fff, 0 0 10px rgba(255,255,255,0.8); 
+        }
+        .instruction { 
+            background: rgba(255, 255, 255, 0.5); 
+            padding: 15px; 
+            border-radius: 15px; 
+            box-shadow: 0 4px 15px rgba(255, 182, 193, 0.3);
+        }
+        .instruction-text {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 1.1em;
+            margin: 8px 0;
+        }
+        .instruction-icon {
+            width: 24px;
+            height: 24px;
+            object-fit: contain;
+        }
+        button {
+            padding: 15px 40px;
+            font-size: 20px;
+            cursor: pointer;
+            background: #ff69b4;
+            color: white;
+            border: none;
+            border-radius: 30px;
+            margin-top: 30px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: transform 0.1s, background 0.2s;
+            position: relative;
+            z-index: 1;
+        }
+        button:active { transform: scale(0.95); }
+        button:hover { background: #ff85c2; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div id="damageFlash"></div>
+    
+    <div id="start-screen" class="overlay">
+        <div class="overlay-bg-konbu"></div>
+        <h1>KONBU<br>SAKURA CATCHER</h1>
+        <div class="instruction">
+            <div class="instruction-text">こんぶを動かして桜を集めよう！</div>
+            <div class="instruction-text">
+                <img src="img/poop.png" alt="うんこ" class="instruction-icon">
+                に注意！鳥からも降ってくるぞ！
+                <img src="img/poop.png" alt="うんこ" class="instruction-icon">
+            </div>
+            <div class="instruction-text">
+                <img src="img/sushi1.png" alt="sushi" class="instruction-icon"> 回復 /
+                <img src="img/sushi2.png" alt="sushi" class="instruction-icon"> 加速 /
+                <img src="img/sushi3.png" alt="sushi" class="instruction-icon"> SP率UP
+            </div>
+        </div>
+        <button id="start-button">ゲームスタート</button>
+    </div>
+
+    <div id="result-screen" class="overlay hidden">
+        <div class="overlay-bg-konbu"></div>
+        <h2 id="result-title">ゲームオーバー</h2>
+        <h1 id="final-score">0</h1>
+        <p id="rank-text" style="font-size: 1.5em; color: #d04080; font-weight: bold;"></p>
+        <button id="restart-button">もう一度プレイ</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const flash = document.getElementById('damageFlash');
+    
+    function createSmartImage(src) {
+        const img = new Image();
+        img.isLoaded = false;
+        img.onload = () => { img.isLoaded = true; };
+        img.src = src;
+        return img;
+    }
+
+    const sakuraImg = createSmartImage('img/sakura.png');
+    const sakuraSpImg = createSmartImage('img/sakurasp.png');
+    const poopImg = createSmartImage('img/poop.png');
+    const coinImg = createSmartImage('img/coin5.png');
+    const eagleImg = createSmartImage('img/eagle.png');
+    const konbuImg = createSmartImage('img/konbu.png'); 
+    const sushiImgs = [
+        createSmartImage('img/sushi1.png'),
+        createSmartImage('img/sushi2.png'),
+        createSmartImage('img/sushi3.png')
+    ];
+
+    let score = 0, specialCount = 0, lives = 5; 
+    let spSakuraRate = 0.10;
+    let playerSpeedBase = 8;
+    let playerSpeedBoost = 0;
+    let isSpecialMode = false, gameActive = false, state = 'title';
+    let player = { x: 0, y: 0, width: 70, height: 70, vy: 0, opacity: 1, isDead: false }; 
+    let items = [], eagles = [], popups = [];
+    let gameStartTime = 0, lastEagleTime = 0, rainbowHue = 0;
+    let keys = {}, touchStartX = 0, playerStartX = 0;
+    let animationId = null;
+
+    const GROUND_HEIGHT = 60; 
+    const GRASS_HEIGHT = 20;   
+
+    class ScorePopup {
+        constructor(x, y, text, color="#fff") {
+            this.x = x; this.y = y; this.text = text; this.color = color;
+            this.life = 60; this.vy = -1.5;
+        }
+        update() { this.y += this.vy; this.life--; }
+        draw() {
+            ctx.save();
+            ctx.globalAlpha = this.life / 60;
+            ctx.font = "bold 20px Arial";
+            ctx.textAlign = "center";
+            ctx.shadowBlur = 4; ctx.shadowColor = "black";
+            ctx.fillStyle = this.color;
+            ctx.fillText(this.text, this.x, this.y);
+            ctx.restore();
+        }
+    }
+
+    function resize() {
+        canvas.width = Math.min(window.innerWidth, 600);
+        canvas.height = window.innerHeight;
+        if (konbuImg.isLoaded) {
+            const aspectRatio = konbuImg.naturalHeight / konbuImg.naturalWidth;
+            player.width = 70;
+            player.height = player.width * aspectRatio;
+        }
+        player.x = canvas.width / 2 - player.width / 2;
+        if (!player.isDead) player.y = canvas.height - GROUND_HEIGHT - player.height + 8;
+    }
+    
+    konbuImg.onload = () => { konbuImg.isLoaded = true; resize(); };
+    window.addEventListener('resize', resize);
+    resize();
+
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    canvas.addEventListener('touchstart', e => {
+        if (!gameActive) return;
+        touchStartX = e.touches[0].clientX;
+        playerStartX = player.x;
+    }, { passive: false });
+    canvas.addEventListener('touchmove', e => {
+        if (!gameActive) return;
+        const touchX = e.touches[0].clientX;
+        player.x = playerStartX + (touchX - touchStartX) * 1.2; 
+        e.preventDefault();
+    }, { passive: false });
+
+    document.getElementById('start-button').onclick = startGame;
+    document.getElementById('restart-button').onclick = startGame;
+
+    function startGame() {
+        if (animationId) cancelAnimationFrame(animationId);
+
+        score = 0; specialCount = 0; lives = 5; 
+        spSakuraRate = 0.10; playerSpeedBase = 8; playerSpeedBoost = 0;
+        isSpecialMode = false; items = []; eagles = []; popups = [];
+        player.isDead = false; player.opacity = 1; player.vy = 0;
+        gameActive = true; state = 'playing';
+        gameStartTime = Date.now();
+        lastEagleTime = Date.now();
+        
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('result-screen').classList.add('hidden');
+        resize();
+        updateLoop();
+    }
+
+    function handleDamage(msg = "痛ｯ！") {
+        lives--;
+        flash.style.opacity = "0.5";
+        setTimeout(() => flash.style.opacity = "0", 150);
+        popups.push(new ScorePopup(player.x + player.width/2, player.y, msg, "#ff4466"));
+        if (lives <= 0) startDieAnimation();
+    }
+
+    function startDieAnimation() {
+        state = 'dying';
+        gameActive = false;
+        player.isDead = true;
+        player.vy = -15;
+        setTimeout(() => endGame("ライフがなくなりました"), 1500);
+    }
+
+    function updateLoop() {
+        if (state === 'title') return;
+        const now = Date.now();
+        rainbowHue = (rainbowHue + 2) % 360;
+
+        if (state === 'playing') {
+            const elapsedSec = (now - gameStartTime) / 1000;
+            const currentInterval = Math.max(1000, 2000 - (elapsedSec * 8));
+
+            let currentSpeed = playerSpeedBase + playerSpeedBoost;
+            if (keys['KeyA'] || keys['ArrowLeft']) player.x -= currentSpeed;
+            if (keys['KeyD'] || keys['ArrowRight']) player.x += currentSpeed;
+            player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
+            
+            if (Math.random() < (isSpecialMode ? 0.30 : 0.06)) createItem();
+            if (now - lastEagleTime > currentInterval) {
+                createEagle();
+                lastEagleTime = now;
+            }
+        }
+
+        if (player.isDead) {
+            player.vy += 0.6;
+            player.y += player.vy;
+            player.opacity -= 0.01;
+        }
+
+        for (let i = eagles.length - 1; i >= 0; i--) {
+            let e = eagles[i];
+            e.x -= e.speed;
+            for (let j = e.poopMilestones.length - 1; j >= 0; j--) {
+                if (e.x <= e.poopMilestones[j]) {
+                    dropPoop(e.x, e.y + e.size * 0.3);
+                    e.poopMilestones.splice(j, 1);
+                }
+            }
+            if (e.x < -e.size) eagles.splice(i, 1);
+        }
+
+        for (let i = items.length - 1; i >= 0; i--) {
+            let it = items[i];
+            it.y += it.speed;
+            if (it.type === 'sakura' || it.type === 'special') {
+                it.angle += it.swingSpeed;
+                it.x = it.centerX + Math.sin(it.angle) * it.swingRange;
+            }
+            it.rotation += it.rotateSpeed;
+
+            if (state === 'playing' && 
+                it.y + it.size/2 > player.y && it.y - it.size/2 < player.y + player.height &&
+                it.x + it.size/2 > player.x && it.x - it.size/2 < player.x + player.width) {
+                
+                if (it.type === 'sakura') { score += 10; popups.push(new ScorePopup(it.x, it.y, "+10", "#fff")); }
+                else if (it.type === 'special') {
+                    score += 20; 
+                    if (!isSpecialMode) {
+                        specialCount++;
+                        if (specialCount >= 5) startSpecialMode();
+                    }
+                }
+                else if (it.type === 'coin') { score += 50; popups.push(new ScorePopup(it.x, it.y, "+50", "#ffd700")); }
+                else if (it.type === 'unko') handleDamage();
+                else if (it.type === 'sushi1') { if(lives < 10) lives++; }
+                else if (it.type === 'sushi2') playerSpeedBase *= 1.1;
+                else if (it.type === 'sushi3') spSakuraRate += 0.01;
+                
+                items.splice(i, 1);
+                continue;
+            }
+            if (it.y > canvas.height + 100) items.splice(i, 1);
+        }
+
+        popups.forEach(p => p.update());
+        popups = popups.filter(p => p.life > 0);
+
+        draw();
+        animationId = requestAnimationFrame(updateLoop);
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        ctx.save();
+        if (isSpecialMode) ctx.filter = 'hue-rotate(45deg) saturate(1.5)';
+        let skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        skyGrad.addColorStop(0, '#a1c4fd');
+        skyGrad.addColorStop(1, '#c2e9fb');
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        ctx.fillStyle = '#8b4513';
+        ctx.fillRect(0, canvas.height - GROUND_HEIGHT + GRASS_HEIGHT, canvas.width, GROUND_HEIGHT - GRASS_HEIGHT);
+        ctx.fillStyle = '#228b22';
+        ctx.fillRect(0, canvas.height - GROUND_HEIGHT, canvas.width, GRASS_HEIGHT);
+
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, player.opacity);
+        if (player.isDead) {
+            ctx.translate(player.x + player.width/2, player.y + player.height/2);
+            ctx.rotate(Math.PI);
+            ctx.translate(-(player.x + player.width/2), -(player.y + player.height/2));
+        }
+        if (konbuImg.isLoaded) {
+            if (playerSpeedBase > 8 && !player.isDead) {
+                ctx.shadowBlur = 10; ctx.shadowColor = '#ff4500';
+            }
+            ctx.drawImage(konbuImg, player.x, player.y, player.width, player.height);
+        }
+        ctx.restore();
+
+        eagles.forEach(e => {
+            if (eagleImg.isLoaded) ctx.drawImage(eagleImg, e.x, e.y, e.size, e.size * 0.7);
+        });
+
+        items.forEach(it => {
+            ctx.save();
+            ctx.translate(it.x, it.y);
+            ctx.rotate(it.rotation * Math.PI / 180);
+            if (it.type === 'sakura' || it.type === 'special') {
+                const img = it.type === 'special' ? sakuraSpImg : sakuraImg;
+                if (it.type === 'special') {
+                    ctx.shadowBlur = 15; ctx.shadowColor = `hsl(${rainbowHue}, 100%, 70%)`;
+                    ctx.filter = `hue-rotate(${rainbowHue}deg)`;
+                }
+                if (img.isLoaded) ctx.drawImage(img, -it.size/2, -it.size/2, it.size, it.size);
+            } else {
+                let targetImg = (it.type === 'coin') ? coinImg : (it.type === 'unko') ? poopImg : null;
+                if (!targetImg && it.type.startsWith('sushi')) targetImg = sushiImgs[parseInt(it.type.slice(-1)) - 1];
+                if (targetImg && targetImg.isLoaded) ctx.drawImage(targetImg, -it.size/2, -it.size/2, it.size, it.size);
+            }
+            ctx.restore();
+        });
+
+        const uiX = 15;
+        ctx.save();
+        ctx.font = 'bold 20px Helvetica'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#333';
+        ctx.fillText(`Score: ${score}`, uiX, 25);
+        for(let i = 0; i < lives; i++) {
+            if (sushiImgs[0].isLoaded) ctx.drawImage(sushiImgs[0], uiX + i * 28, 50, 25, 25);
+        }
+        if (isSpecialMode) {
+            ctx.fillStyle = '#ff1493';
+            ctx.fillText('SPECIAL MODE!!', uiX, 90);
+        } else {
+            for(let i = 0; i < 5; i++) {
+                ctx.globalAlpha = i < specialCount ? 1.0 : 0.2;
+                if (sakuraSpImg.isLoaded) ctx.drawImage(sakuraSpImg, uiX + i * 28, 78, 25, 25);
+            }
+        }
+        ctx.restore();
+        popups.forEach(p => p.draw());
+    }
+
+    function createItem() {
+        if (isSpecialMode) {
+            const rand = Math.random();
+            let type, img, size = 28;
+            if (rand < 0.60) { type = 'coin'; img = coinImg; }
+            else if (rand < 0.85) { type = 'unko'; img = poopImg; size = 60; }
+            else if (rand < 0.90) { type = 'sushi1'; img = sushiImgs[0]; }
+            else if (rand < 0.95) { type = 'sushi2'; img = sushiImgs[1]; }
+            else { type = 'sushi3'; img = sushiImgs[2]; }
+            items.push({ x: randomRange(30, canvas.width - 30), y: -50, speed: randomRange(6, 10) * 1.5, size: size, type: type, rotation: 0, rotateSpeed: randomRange(-2, 2) });
+        } else {
+            const isSp = Math.random() < spSakuraRate;
+            const type = isSp ? 'special' : 'sakura';
+            const swing = 50 * randomRange(0.8, 1.2);
+            let size = 25 * randomRange(1.5, 2.5);
+            let spd = randomRange(1.5, 3);
+            if (isSp) { size *= 0.5; spd *= 2.0; }
+            items.push({ centerX: randomRange(swing, canvas.width - swing), x: 0, y: -size, speed: spd, size: size, type: type, angle: Math.random() * Math.PI * 2, swingSpeed: randomRange(0.02, 0.05), swingRange: swing, rotation: Math.random() * 360, rotateSpeed: randomRange(-1, 1) });
+        }
+    }
+    function createEagle() {
+        const size = 60 * randomRange(1.0, 1.5);
+        eagles.push({ x: canvas.width + size, y: randomRange(size, canvas.height * 0.3), speed: randomRange(3, 5), size: size, poopCount: 1, poopMilestones: [randomRange(50, canvas.width - 50)] });
+    }
+    function dropPoop(x, y) { items.push({ x: x, y: y, speed: randomRange(6, 10) * 1.5, size: 60, type: 'unko', rotation: 0, rotateSpeed: randomRange(-2, 2) }); }
+    function startSpecialMode() { isSpecialMode = true; specialCount = 0; setTimeout(() => { isSpecialMode = false; }, 7000); }
+    function randomRange(min, max) { return Math.random() * (max - min) + min; }
+    function endGame(reason) {
+        state = 'gameover';
+        document.getElementById('result-title').innerText = reason;
+        document.getElementById('final-score').innerText = `Score: ${score}`;
+        let rank = score >= 3000 ? "🌸 究極の桜マスター 🌸" : score >= 1500 ? "✨ プロの桜使い ✨" : "🐣 桜集め修行中";
+        document.getElementById('rank-text').innerText = rank;
+        document.getElementById('result-screen').classList.remove('hidden');
+    }
+</script>
+
+</body>
+</html>
