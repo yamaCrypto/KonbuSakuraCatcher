@@ -425,13 +425,14 @@
     function createItem() {
         if (isSpecialMode) {
             const rand = Math.random();
-            let type, img, size = 28;
-            if (rand < 0.60) { type = 'coin'; img = coinImg; }
-            else if (rand < 0.85) { type = 'unko'; img = poopImg; size = 42; } // 60 * 0.7 = 42
-            else if (rand < 0.90) { type = 'sushi1'; img = sushiImgs[0]; }
-            else if (rand < 0.95) { type = 'sushi2'; img = sushiImgs[1]; }
-            else { type = 'sushi3'; img = sushiImgs[2]; }
-            items.push({ x: randomRange(30, canvas.width - 30), y: -50, speed: randomRange(6, 10) * 1.5, size: size, type: type, rotation: 0, rotateSpeed: randomRange(-2, 2) });
+            let type, size = 28;
+            if (rand < 0.60) { type = 'coin'; }
+            else if (rand < 0.85) { type = 'unko'; size = 42; }
+            else if (rand < 0.90) { type = 'sushi1'; }
+            else if (rand < 0.95) { type = 'sushi2'; }
+            else { type = 'sushi3'; }
+            // 落下速度を現在の80%に調整 (元の randomRange(6, 10) * 0.8 = 4.8, 8.0)
+            items.push({ x: randomRange(30, canvas.width - 30), y: -50, speed: randomRange(4.8, 8) * 1.5, size: size, type: type, rotation: 0, rotateSpeed: randomRange(-2, 2) });
         } else {
             const isSp = Math.random() < spSakuraRate;
             const type = isSp ? 'special' : 'sakura';
@@ -446,7 +447,8 @@
         const size = 60 * randomRange(1.0, 1.5);
         eagles.push({ x: canvas.width + size, y: randomRange(size, canvas.height * 0.3), speed: randomRange(3, 5), size: size, poopCount: 1, poopMilestones: [randomRange(50, canvas.width - 50)] });
     }
-    function dropPoop(x, y) { items.push({ x: x, y: y, speed: randomRange(6, 10) * 1.5, size: 42, type: 'unko', rotation: 0, rotateSpeed: randomRange(-2, 2) }); } // 60 * 0.7 = 42
+    // 鳥から落ちるうんこの速度も、統一感を持たせるためスペシャル時と同じ倍率に合わせました
+    function dropPoop(x, y) { items.push({ x: x, y: y, speed: randomRange(4.8, 8) * 1.5, size: 42, type: 'unko', rotation: 0, rotateSpeed: randomRange(-2, 2) }); }
     function startSpecialMode() { isSpecialMode = true; specialCount = 0; setTimeout(() => { isSpecialMode = false; }, 7000); }
     function randomRange(min, max) { return Math.random() * (max - min) + min; }
     function endGame(reason) {
